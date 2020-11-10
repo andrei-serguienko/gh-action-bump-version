@@ -12,11 +12,7 @@ Toolkit.run(async tools => {
   const pkg = tools.getPackageJSON()
   const event = tools.context.payload
 
-  if (!event.commits) {
-    console.log('Couldn\'t find any commits in this event, incrementing patch version...')
-  }
-
-  const messages = event.commits ? event.commits.map(commit => commit.message + '\n' + commit.body) : []
+  const messages = [event.pull_request.title, event.pull_request.description]
 
   const commitMessage = 'version bump to'
   console.log('messages:', messages);
