@@ -1,5 +1,8 @@
 const { Toolkit } = require('actions-toolkit')
 const { execSync } = require('child_process')
+const core = require('@actions/core')
+const replace = require('replace-in-file')
+const fs = require('fs')
 
 // Change working directory if user defined PACKAGEJSON_DIR
 if (process.env.PACKAGEJSON_DIR) {
@@ -19,7 +22,7 @@ Toolkit.run(async tools => {
   const messages = event.commits ? event.commits.map(commit => commit.message + '\n' + commit.body) : []
 
   const commitMessage = 'version bump to'
-  console.log('messages:', messages);
+  console.log('messages:', messages)
   const isVersionBump = messages.map(message => message.toLowerCase().includes(commitMessage)).includes(true)
   if (isVersionBump) {
     tools.exit.success('No action necessary!')
@@ -31,25 +34,25 @@ Toolkit.run(async tools => {
   const patchWords = process.env['INPUT_PATCH-WORDING'].split(',')
   const preReleaseWords = process.env['INPUT_RC-WORDING'].split(',')
 
-  let version = process.env['INPUT_DEFAULT'] || 'patch'
-  let foundWord = null;
-  
+  let version = process.env.INPUT_DEFAULT || 'patch'
+  let foundWord = null
+
   if (messages.some(
     message => /^([a-zA-Z]+)(\(.+\))?(\!)\:/.test(message) || majorWords.some(word => message.includes(word)))) {
     version = 'major'
   } else if (messages.some(message => minorWords.some(word => message.includes(word)))) {
     version = 'minor'
   } else if (messages.some(message => preReleaseWords.some(word => {
-        if (message.includes(word)) {
-          foundWord = word;
-          return true;
-        } else {
-          return false;
-        }
-      }
-    ))) {
-      const preid = foundWord.split("-")[1];
-      version = `prerelease --preid=${preid}`;
+    if (message.includes(word)) {
+      foundWord = word
+      return true
+    } else {
+      return false
+    }
+  }
+  ))) {
+    const preid = foundWord.split('-')[1]
+    version = `prerelease --preid=${preid}`
   } else if (patchWords && Array.isArray(patchWords)) {
     if (!messages.some(message => patchWords.some(word => message.includes(word)))) {
       version = null
@@ -83,6 +86,36 @@ Toolkit.run(async tools => {
       ['version', '--allow-same-version=true', '--git-tag-version=false', current])
     console.log('current:', current, '/', 'version:', version)
     let newVersion = execSync(`npm version --git-tag-version=false ${version}`).toString().trim()
+
+    // Increment IOS BUILD
+    const optionsVersionBuild = {
+      files: '/github/workspace/ios/App/App/Info.plist',
+      from: /<key>CFBundleShortVersionString<\/key>\s*<string>(\d{1,2}\.\d{1,2}\.\d{1,2})<\/string>/,
+      to: '<key>CFBundleShortVersionString</key>\n\t<string>' + newVersion.substring(1) + '</string>'
+    }
+    try {
+      const changedFiles = replace.sync(optionsVersionBuild)
+      console.log('Modified files:', changedFiles.join(', '))
+    } catch (error) {
+      console.error('Error occurred:', error)
+    }
+
+    const data = await fs.readFileSync('/github/workspace/ios/App/App/Info.plist', { encoding: 'utf8' })
+    const regex = /<key>CFBundleVersion<\/key>\s*<string>(\d*)<\/string>/
+    const found = data.match(regex)
+    const buildNumber = parseInt(found[1])
+    const optionsBuildNumber = {
+      files: '/github/workspace/ios/App/App/Info.plist',
+      from: /<key>CFBundleVersion<\/key>\s*<string>(\d*)<\/string>/,
+      to: '<key>CFBundleVersion</key>\n\t<string>' + (buildNumber + 1) + '</string>'
+    }
+    try {
+      const changedFiles = replace.sync(optionsBuildNumber)
+      console.log('Modified files:', changedFiles.join(', '))
+    } catch (error) {
+      console.error('Error occurred:', error)
+    }
+
     await tools.runInWorkspace('git', ['commit', '-a', '-m', `ci: ${commitMessage} ${newVersion}`])
 
     // now go to the actual branch to perform the same versioning
@@ -96,7 +129,9 @@ Toolkit.run(async tools => {
     console.log('current:', current, '/', 'version:', version)
     newVersion = execSync(`npm version --git-tag-version=false ${version}`).toString().trim()
     newVersion = `${process.env['INPUT_TAG-PREFIX']}${newVersion}`
+    core.setOutput('newVersion', newVersion)
     console.log('new version:', newVersion)
+
     try {
       // to support "actions/checkout@v1"
       await tools.runInWorkspace('git', ['commit', '-a', '-m', `ci: ${commitMessage} ${newVersion}`])
