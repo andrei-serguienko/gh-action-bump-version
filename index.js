@@ -100,20 +100,58 @@ Toolkit.run(async tools => {
       console.error('Error occurred:', error)
     }
 
-    const data = await fs.readFileSync('/github/workspace/ios/App/App/Info.plist', { encoding: 'utf8' })
-    const regex = /<key>CFBundleVersion<\/key>\s*<string>(\d*)<\/string>/
-    const found = data.match(regex)
-    const buildNumber = parseInt(found[1])
-    const optionsBuildNumber = {
-      files: '/github/workspace/ios/App/App/Info.plist',
-      from: /<key>CFBundleVersion<\/key>\s*<string>(\d*)<\/string>/,
-      to: '<key>CFBundleVersion</key>\n\t<string>' + (buildNumber + 1) + '</string>'
-    }
     try {
-      const changedFiles = replace.sync(optionsBuildNumber)
-      console.log('Modified files:', changedFiles.join(', '))
-    } catch (error) {
-      console.error('Error occurred:', error)
+      const data = await fs.readFileSync('/github/workspace/ios/App/App/Info.plist', { encoding: 'utf8' })
+      const regex = /<key>CFBundleVersion<\/key>\s*<string>(\d*)<\/string>/
+      const found = data.match(regex)
+      const buildNumber = parseInt(found[1])
+      const optionsBuildNumber = {
+        files: '/github/workspace/ios/App/App/Info.plist',
+        from: /<key>CFBundleVersion<\/key>\s*<string>(\d*)<\/string>/,
+        to: '<key>CFBundleVersion</key>\n\t<string>' + (buildNumber + 1) + '</string>'
+      }
+      try {
+        const changedFiles = replace.sync(optionsBuildNumber)
+        console.log('Modified files:', changedFiles.join(', '))
+      } catch (error) {
+        console.error('Error occurred:', error)
+      }
+    } catch (e) {
+      console.error('Error occurred:', e)
+    }
+
+    // Increment ANDROID build
+
+    try {
+      const optionsVersionBuild = {
+        files: '/github/workspace/android/app/build.gradle',
+        from: /versionName "(\d*\.\d*\.\d*)"/,
+        to: 'versionName "' + newVersion.substring(1) + '"'
+      }
+      try {
+        const changedFiles = replace.sync(optionsVersionBuild)
+        console.log('Modified files:', changedFiles.join(', '))
+      } catch (error) {
+        console.error('Error occurred:', error)
+      }
+
+      const data = await fs.readFileSync('/github/workspace/android/app/build.gradle', { encoding: 'utf8' })
+      const regex = /versionCode (\d*)/
+      const found = data.match(regex)
+      const buildNumber = parseInt(found[1])
+      const optionsBuildNumber = {
+        files: '/github/workspace/android/app/build.gradle',
+        from: /versionCode (\d*)/,
+        to: 'versionCode ' + (buildNumber + 1)
+      }
+      try {
+        const changedFiles = replace.sync(optionsBuildNumber)
+        console.log('Modified files:', changedFiles.join(', '))
+      } catch (error) {
+        console.error('Error occurred:', error)
+      }
+    } catch (e) {
+      console.error('Error occurred:', e)
     }
 
     await tools.runInWorkspace('git', ['commit', '-a', '-m', `ci: ${commitMessage} ${newVersion}`])
