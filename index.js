@@ -19,7 +19,8 @@ Toolkit.run(async tools => {
     console.log('Couldn\'t find any commits in this event, incrementing patch version...')
   }
 
-  const messages = event.commits ? event.commits.map(commit => commit.message + '\n' + commit.body) : []
+  // const messages = event.commits ? event.commits.map(commit => commit.message + '\n' + commit.body) : []
+  const messages = [core.getInput('message')]
 
   const commitMessage = 'version bump to'
   console.log('messages:', messages)
